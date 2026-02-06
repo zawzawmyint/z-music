@@ -4,7 +4,12 @@ import SongList from "@/components/song/SongList";
 import { Colors } from "@/constants/color";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
-import { AudioSource, useAudioPlayer } from "expo-audio";
+import {
+  AudioSource,
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+} from "expo-audio";
 import * as MediaLibrary from "expo-media-library";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -21,16 +26,14 @@ type RepeatMode = "off" | "all" | "one";
 const Home = () => {
   const [songs, setSongs] = useState<Song[]>([]);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [permissionResponse, requestPermission] = MediaLibrary.usePermissions();
-  const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [isShuffleOn, setIsShuffleOn] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
 
   const player = useAudioPlayer();
+  const status = useAudioPlayerStatus(player);
   const currentSongRef = useRef<Song | null>(null);
   const shuffledSongsRef = useRef<Song[]>([]);
   const originalSongsRef = useRef<Song[]>([]);
@@ -39,6 +42,11 @@ const Home = () => {
   useEffect(() => {
     (async () => {
       await requestPermission();
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionModeAndroid: "doNotMix",
+      });
     })();
   }, []);
 
@@ -49,7 +57,7 @@ const Home = () => {
     }
     const media = await MediaLibrary.getAssetsAsync({
       mediaType: MediaLibrary.MediaType.audio,
-      first: 1000,
+      first: 3000,
       sortBy: MediaLibrary.SortBy.default,
     });
 
@@ -63,7 +71,7 @@ const Home = () => {
           duration: asset.duration,
           artist: "Unknown Artist",
         };
-      })
+      }),
     );
     setSongs(songsList);
     originalSongsRef.current = songsList;
@@ -105,7 +113,7 @@ const Home = () => {
 
   // Get current playlist (shuffled or original)
   const getCurrentPlaylist = () => {
-    return isShuffleOn ? shuffledSongsRef.current : songs;
+    return isShuffleOn ? shuffledSongsRef.current : originalSongsRef.current;
   };
 
   // Format time in minutes:seconds
@@ -119,14 +127,12 @@ const Home = () => {
   // Play song function
   const playSong = async (song: Song) => {
     try {
+      // await player.activate();
       player.replace({ uri: song.uri } as AudioSource);
       player.play();
 
       setCurrentSong(song);
       currentSongRef.current = song;
-      setIsPlaying(true);
-      setPosition(0);
-      setDuration(song.duration * 1000); // Convert to milliseconds
     } catch (error) {
       console.error("Error playing song:", error);
       Alert.alert("Error", "Failed to play the song. Please try again.");
@@ -148,51 +154,23 @@ const Home = () => {
       // Play next song, stop if at end
       const playlist = getCurrentPlaylist();
       const currentIndex = playlist.findIndex(
-        (song) => song.id === currentSong?.id
+        (song) => song.id === currentSong?.id,
       );
 
       if (currentIndex < playlist.length - 1) {
         playNextSong();
       } else {
         // Stop playing at the end
-        setIsPlaying(false);
+        // No need to setIsPlaying(false), status hook will handle it
       }
     }
   };
 
-  // Monitor playback status
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (player.playing) {
-        setPosition(player.currentTime * 1000);
-        setIsPlaying(true);
-
-        // Update duration if available
-        if (player.duration && player.duration > 0) {
-          setDuration(player.duration * 1000);
-        }
-      } else {
-        setIsPlaying(false);
-      }
-
-      // Check if song finished
-      if (
-        player.duration &&
-        player.currentTime >= player.duration - 0.1 &&
-        player.currentTime > 0
-      ) {
-        handleSongFinished();
-      }
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [
-    player.playing,
-    player.currentTime,
-    player.duration,
-    repeatMode,
-    currentSong,
-  ]);
+    if (status.isLoaded && status.didJustFinish) {
+      handleSongFinished();
+    }
+  }, [status.isLoaded, status.didJustFinish, repeatMode, currentSong]);
 
   // player controls
   const togglePlayPause = () => {
@@ -208,7 +186,7 @@ const Home = () => {
     if (playlist.length === 0) return;
 
     const currentIndex = playlist.findIndex(
-      (song) => song.id === currentSong?.id
+      (song) => song.id === currentSong?.id,
     );
     const prevIndex =
       currentIndex === 0 ? playlist.length - 1 : currentIndex - 1;
@@ -220,7 +198,7 @@ const Home = () => {
     if (playlist.length === 0) return;
 
     const currentIndex = playlist.findIndex(
-      (song) => song.id === currentSong?.id
+      (song) => song.id === currentSong?.id,
     );
     const nextIndex = currentIndex === songs.length - 1 ? 0 : currentIndex + 1;
     playSong(playlist[nextIndex]);
@@ -258,7 +236,7 @@ const Home = () => {
                   name={isSearching ? "close-circle" : "search-outline"}
                   size={24}
                   style={{ marginRight: 10 }}
-                  color={Colors.textSecondary}
+                  color={Colors.text}
                 />
               </TouchableOpacity>
             </View>
@@ -267,10 +245,12 @@ const Home = () => {
           {/* Search Input */}
           {isSearching && (
             <TextInput
+              autoFocus
               style={styles.searchInput}
-              placeholder="Search songs..."
+              placeholder="Search..."
               value={searchQuery}
               onChangeText={setSearchQuery}
+              cursorColor={Colors.primary}
             />
           )}
           {/* Song List */}
@@ -282,25 +262,25 @@ const Home = () => {
             searchQuery={searchQuery}
           />
         </View>
+        {/* Player Controls */}
+        {currentSong && (
+          <CurrentPlayingSong
+            currentSong={currentSong}
+            isPlaying={status.playing}
+            togglePlayPause={togglePlayPause}
+            playPreviousSong={playPreviousSong}
+            playNextSong={playNextSong}
+            position={status.currentTime * 1000}
+            duration={status.duration * 1000}
+            formatTime={formatTime}
+            seekToPosition={seekToPosition}
+            isShuffleOn={isShuffleOn}
+            toggleShuffle={toggleShuffle}
+            repeatMode={repeatMode}
+            toggleRepeat={toggleRepeat}
+          />
+        )}
       </BaseContainer>
-      {/* Player Controls */}
-      {currentSong && (
-        <CurrentPlayingSong
-          currentSong={currentSong}
-          isPlaying={isPlaying}
-          togglePlayPause={togglePlayPause}
-          playPreviousSong={playPreviousSong}
-          playNextSong={playNextSong}
-          position={position}
-          duration={duration}
-          formatTime={formatTime}
-          seekToPosition={seekToPosition}
-          isShuffleOn={isShuffleOn}
-          toggleShuffle={toggleShuffle}
-          repeatMode={repeatMode}
-          toggleRepeat={toggleRepeat}
-        />
-      )}
     </>
   );
 };
@@ -310,8 +290,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: 30,
-    paddingBottom: 20,
+    paddingTop: 10,
+    paddingBottom: 10,
     paddingHorizontal: 20,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -328,13 +308,14 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   searchInput: {
-    padding: 10,
+    padding: 15,
     width: "95%",
     margin: "auto",
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.primary,
+    backgroundColor: Colors.background,
+    borderColor: Colors.text,
     marginBottom: 20,
+    color: Colors.text,
   },
 });
 

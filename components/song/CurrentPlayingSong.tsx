@@ -118,8 +118,8 @@ const CurrentPlayingSong = ({
               repeatMode === "off"
                 ? "repeat"
                 : repeatMode === "all"
-                ? "repeat"
-                : "repeat-sharp"
+                  ? "repeat"
+                  : "repeat-sharp"
             }
             size={24}
             color={repeatMode !== "off" ? Colors.primary : Colors.textSecondary}
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   playerContainer: {
     padding: 15,
     borderRadius: 20,
-    backgroundColor: Colors.text,
+    backgroundColor: "#494747aa",
     margin: 10,
   },
   arrowContainer: {

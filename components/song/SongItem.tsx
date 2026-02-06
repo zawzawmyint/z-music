@@ -1,8 +1,15 @@
 import { Colors } from "@/constants/color";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import React, { useEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
 const SongItem = ({
   song,
@@ -13,6 +20,25 @@ const SongItem = ({
   currentSong: Song | null;
   playSong: (song: Song) => void;
 }) => {
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    // Repeat the animation forever (-1 means infinite repetitions)
+    rotation.value = withRepeat(
+      withTiming(360, {
+        duration: 2000, // Animation duration (ms)
+        easing: Easing.linear, // Linear easing for a smooth loop
+      }),
+      -1, // Number of repetitions: -1 is infinite
+      false, // Reverse: false means it restarts from 0deg each time
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ rotate: `${rotation.value}deg` }],
+    };
+  });
   return (
     <TouchableOpacity
       style={[
@@ -30,6 +56,7 @@ const SongItem = ({
           }
           size={22}
           color={currentSong?.id === song.id ? Colors.primary : Colors.text}
+          // style={animatedStyle}
         />
         <View style={styles.songTitleContainer}>
           <Text
@@ -66,10 +93,12 @@ const styles = StyleSheet.create({
   songTitle: {
     fontSize: 16,
     fontWeight: "600",
+    color: Colors.text,
   },
   songArtist: {
     fontSize: 14,
     marginTop: 2,
+    color: Colors.textSecondary,
   },
 });
 
