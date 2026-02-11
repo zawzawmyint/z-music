@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   playerContainer: {
     padding: 15,
     borderRadius: 20,
-    backgroundColor: "#494747aa",
+    backgroundColor: Colors.backgroundSecondary,
     margin: 10,
   },
   arrowContainer: {

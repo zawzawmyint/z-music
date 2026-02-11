@@ -1,15 +1,13 @@
 import BaseContainer from "@/components/global/BaseContainer";
 import CurrentPlayingSong from "@/components/song/CurrentPlayingSong";
+import RenameModal from "@/components/song/RenameModal";
 import SongList from "@/components/song/SongList";
+import SongOptionModal from "@/components/song/SongOptionModal";
 import { Colors } from "@/constants/color";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  AudioSource,
-  setAudioModeAsync,
-  useAudioPlayer,
-  useAudioPlayerStatus,
-} from "expo-audio";
+import { AudioSource, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { File } from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -31,6 +29,9 @@ const Home = () => {
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [isRenameModalVisible, setIsRenameModalVisible] = useState(false);
+  const [isOptionModalVisible, setIsOptionModalVisible] = useState(false);
+  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
 
   const player = useAudioPlayer();
   const status = useAudioPlayerStatus(player);
@@ -42,11 +43,6 @@ const Home = () => {
   useEffect(() => {
     (async () => {
       await requestPermission();
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        shouldPlayInBackground: true,
-        interruptionModeAndroid: "doNotMix",
-      });
     })();
   }, []);
 
@@ -215,6 +211,107 @@ const Home = () => {
     }
   };
 
+  const handleSongOption = (song: Song) => {
+    setSelectedSong(song);
+    setIsOptionModalVisible(true);
+  };
+
+  const confirmDeleteSong = (song: Song) => {
+    Alert.alert(
+      "Delete Song",
+      `Are you sure you want to delete "${song.title}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteSong(song),
+        },
+      ],
+      { cancelable: true },
+    );
+  };
+
+  const deleteSong = async (song: Song) => {
+    try {
+      const success = await MediaLibrary.deleteAssetsAsync([song.id]);
+      if (success) {
+        setSongs((prev) => prev.filter((s) => s.id !== song.id));
+        originalSongsRef.current = originalSongsRef.current.filter(
+          (s) => s.id !== song.id,
+        );
+        shuffledSongsRef.current = shuffledSongsRef.current.filter(
+          (s) => s.id !== song.id,
+        );
+
+        if (currentSong?.id === song.id) {
+          player.pause();
+          setCurrentSong(null);
+        }
+        Alert.alert("Success", "Song deleted successfully");
+      } else {
+        Alert.alert("Error", "Could not delete the song");
+      }
+    } catch (error) {
+      console.error("Error deleting song:", error);
+      Alert.alert("Error", "Failed to delete song.");
+    }
+  };
+
+  const handleRenameSubmit = async (newName: string) => {
+    if (!selectedSong) return;
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Denied",
+          "Storage permission is required to rename files.",
+        );
+        return;
+      }
+      const extension = selectedSong.uri.split(".").pop();
+      const newFileName = newName + "." + extension;
+
+      // Create File instance from the current URI
+      const file = new File(selectedSong.uri);
+
+      // Get the parent directory
+      const parentDir = file.parentDirectory;
+
+      // Create the destination File instance
+      const newFile = new File(parentDir, newFileName);
+
+      // Move/rename the file
+      await file.move(newFile);
+
+      const updatedSong = { ...selectedSong, title: newName, uri: newFile.uri };
+
+      setSongs((prev) =>
+        prev.map((s) => (s.id === selectedSong.id ? updatedSong : s)),
+      );
+      originalSongsRef.current = originalSongsRef.current.map((s) =>
+        s.id === selectedSong.id ? updatedSong : s,
+      );
+      shuffledSongsRef.current = shuffledSongsRef.current.map((s) =>
+        s.id === selectedSong.id ? updatedSong : s,
+      );
+
+      if (currentSong?.id === selectedSong.id) {
+        setCurrentSong(updatedSong);
+      }
+
+      setIsRenameModalVisible(false);
+      Alert.alert("Success", "Song renamed successfully");
+    } catch (error) {
+      console.error("Error renaming song:", error);
+      Alert.alert(
+        "Error",
+        "Failed to rename song. File system permissions might be restricted.",
+      );
+    }
+  };
+
   useEffect(() => {
     if (permissionResponse?.status !== "granted") return;
     LoadSongsFromDevice();
@@ -260,6 +357,7 @@ const Home = () => {
             playSong={playSong}
             isSearching={isSearching}
             searchQuery={searchQuery}
+            onOptionPress={handleSongOption}
           />
         </View>
         {/* Player Controls */}
@@ -281,6 +379,19 @@ const Home = () => {
           />
         )}
       </BaseContainer>
+      <SongOptionModal
+        isVisible={isOptionModalVisible}
+        onClose={() => setIsOptionModalVisible(false)}
+        song={selectedSong}
+        onRename={() => setIsRenameModalVisible(true)}
+        onDelete={() => selectedSong && confirmDeleteSong(selectedSong)}
+      />
+      <RenameModal
+        visible={isRenameModalVisible}
+        onClose={() => setIsRenameModalVisible(false)}
+        onSubmit={handleRenameSubmit}
+        currentName={selectedSong?.title || ""}
+      />
     </>
   );
 };

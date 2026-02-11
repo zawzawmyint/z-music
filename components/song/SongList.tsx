@@ -12,23 +12,30 @@ const SongList = ({
   playSong,
   isSearching,
   searchQuery,
+  onOptionPress,
 }: {
   songs: Song[];
   currentSong: Song | null;
   playSong: (song: Song) => void;
   isSearching: boolean;
   searchQuery: string;
+  onOptionPress: (song: Song) => void;
 }) => {
   // Filter songs based on search query
   const filteredSongs = songs.filter((song) =>
-    song.title.toLowerCase().includes(searchQuery.toLowerCase())
+    song.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   return (
     <FlatList
       data={isSearching ? filteredSongs : songs}
       renderItem={({ item }) => (
-        <SongItem song={item} currentSong={currentSong} playSong={playSong} />
+        <SongItem
+          song={item}
+          currentSong={currentSong}
+          playSong={playSong}
+          onOptionPress={onOptionPress}
+        />
       )}
       keyExtractor={(item) => item.id}
       ListEmptyComponent={

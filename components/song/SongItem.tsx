@@ -15,10 +15,12 @@ const SongItem = ({
   song,
   currentSong,
   playSong,
+  onOptionPress,
 }: {
   song: Song;
   currentSong: Song | null;
   playSong: (song: Song) => void;
+  onOptionPress: (song: Song) => void;
 }) => {
   const rotation = useSharedValue(0);
 
@@ -69,6 +71,13 @@ const SongItem = ({
           </Text>
           <Text style={styles.songArtist}>{song.artist}</Text>
         </View>
+        <TouchableOpacity onPress={() => onOptionPress(song)} style={{ padding: 5 }}>
+          <Ionicons
+            name="ellipsis-vertical"
+            size={20}
+            color={Colors.textSecondary}
+          />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
